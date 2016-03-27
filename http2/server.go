@@ -2039,6 +2039,61 @@ func (rws *responseWriterState) promoteUndeclaredTrailers() {
 	}
 }
 
+type streamConn struct {
+	rws *responseWriterState
+}
+
+func (c *streamConn) Read(p []byte) (int, error) {
+	return c.rws.body.Read(p)
+}
+
+func (c *streamConn) Write(p []byte) (int, error) {
+	switch c.rws.stream.state {
+	case stateHalfClosedLocal, stateHalfClosedRemote, stateClosed:
+		return 0, StreamError{c.rws.stream.id, ErrCodeStreamClosed}
+	}
+
+	curWrite := &c.rws.curWrite
+	curWrite.streamID = c.rws.stream.id
+	curWrite.p = p
+	curWrite.endStream = false
+	if err := c.rws.conn.writeDataFromHandler(c.rws.stream, curWrite, c.rws.frameWriteCh); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (c *streamConn) Close() error {
+	c.rws.conn.resetStream(StreamError{c.rws.stream.id, ErrCodeCancel})
+	return nil
+}
+
+func (c *streamConn) LocalAddr() net.Addr {
+	return c.rws.conn.conn.LocalAddr()
+}
+
+func (c *streamConn) RemoteAddr() net.Addr {
+	return c.rws.conn.conn.RemoteAddr()
+}
+
+func (c *streamConn) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *streamConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *streamConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+func (w *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	w.Flush()
+	dc := &streamConn{w.rws}
+	return dc, bufio.NewReadWriter(bufio.NewReaderSize(dc, 0), bufio.NewWriterSize(dc, 0)), nil
+}
+
 func (w *responseWriter) Flush() {
 	rws := w.rws
 	if rws == nil {
