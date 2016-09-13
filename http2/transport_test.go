@@ -31,8 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
-	"golang.org/x/net/http2/hpack"
+	"github.com/phuslu/net/http2/hpack"
+	"golang.org/phuslu/net/context"
 )
 
 var (
